@@ -121,13 +121,23 @@ NS_ASSUME_NONNULL_BEGIN
 
 /**
  Initialize the global TrustKit singleton with the supplied pinning policy.
- 
+
  @param trustKitConfig A dictionary containing various keys for configuring the SSL pinning policy.
  @exception NSException Thrown when the supplied configuration is invalid or TrustKit has
  already been initialized.
- 
+
  */
 + (void)initSharedInstanceWithConfiguration:(NSDictionary<TSKGlobalConfigurationKey, id> *)trustKitConfig;
+
+
+/**
+ Update the global TrustKit singleton's pinning policy.
+
+ @param trustKitConfig A dictionary containing various keys for configuring the SSL pinning policy.
+ @exception NSException Thrown when the supplied configuration is invalid.
+
+ */
++ (void)updateSharedInstanceConfiguration:(NSDictionary<TSKGlobalConfigurationKey, id> *)trustKitConfig;
 
 
 /**
@@ -170,16 +180,22 @@ NS_ASSUME_NONNULL_BEGIN
 
 /**
  Initialize a local TrustKit instance with the supplied SSL pinning policy configuration.
- 
+
  This method is useful in scenarios where the TrustKit singleton cannot be used, for example within
- larger Apps that have split some of their functionality into multiple framework/SDK. Each 
+ larger Apps that have split some of their functionality into multiple framework/SDK. Each
  framework can initialize its own instance of TrustKit and use it for pinning validation independently
  of the App's other components.
- 
+
  @param trustKitConfig A dictionary containing various keys for configuring the SSL pinning policy.
  */
 - (instancetype)initWithConfiguration:(NSDictionary<TSKGlobalConfigurationKey, id> *)trustKitConfig;
 
+/**
+ Update a TrustKit instance's SSL pinning policy configuration.
+
+ @param trustKitConfig A dictionary containing various keys for configuring the SSL pinning policy.
+ */
+- (void)updateConfiguration:(NSDictionary<TSKGlobalConfigurationKey, id> *)trustKitConfig;
 
 
 #pragma mark Other Settings
