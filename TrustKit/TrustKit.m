@@ -10,7 +10,6 @@
  */
 
 #import "TrustKit.h"
-#import "Reporting/TSKBackgroundReporter.h"
 #import "Pinning/TSKSPKIHashCache.h"
 #import "Swizzling/TSKNSURLConnectionDelegateProxy.h"
 #import "Swizzling/TSKNSURLSessionDelegateProxy.h"
@@ -27,8 +26,6 @@ static NSString * const kTSKConfiguration = @"TSKConfiguration";
 // Default report URI - can be disabled with TSKDisableDefaultReportUri
 // Email info@datatheorem.com if you need a free dashboard to see your App's reports
 static NSString * const kTSKDefaultReportUri = @"https://overmind.datatheorem.com/trustkit/report";
-
-static const char kTSKPinFailureReporterQueueLabel[] = "com.datatheorem.trustkit.reporterqueue";
 
 
 #pragma mark TrustKit Global State
@@ -64,8 +61,6 @@ void TSKLog(NSString *format, ...)
 
 
 @interface TrustKit ()
-@property (nonatomic) TSKBackgroundReporter *pinFailureReporter;
-@property (nonatomic) dispatch_queue_t pinFailureReporterQueue;
 @property (nonatomic, readonly, nullable) NSDictionary *configuration;
 @end
 
@@ -128,15 +123,7 @@ void TSKLog(NSString *format, ...)
         _configuration = parseTrustKitConfiguration(trustKitConfig);
         
         _pinningValidatorCallbackQueue = dispatch_get_main_queue();
-        
-        // Create a dispatch queue for activating the reporter
-        // We use a serial queue targetting the global default queue in order to ensure reports are sent one by one
-        // even when a lot of pin failures are occuring, instead of spamming the global queue with events to process
-        _pinFailureReporterQueue = dispatch_queue_create(kTSKPinFailureReporterQueueLabel, DISPATCH_QUEUE_SERIAL);
-        
-        // Create our reporter for sending pin validation failures; do this before hooking NSURLSession so we don't hook ourselves
-        _pinFailureReporter = [[TSKBackgroundReporter alloc] initAndRateLimitReports:YES];
-        
+
         // Handle global configuration flags here
         // TSKIgnorePinningForUserDefinedTrustAnchors
 #if TARGET_OS_IPHONE
@@ -167,7 +154,7 @@ void TSKLog(NSString *format, ...)
         _pinningValidator = [[TSKPinningValidator alloc] initWithDomainPinningPolicies:_configuration[kTSKPinnedDomains]
                                                                              hashCache:sharedHashCache
                                                          ignorePinsForUserTrustAnchors:userTrustAnchorBypass
-                                                               validationCallbackQueue:_pinFailureReporterQueue
+                                                               validationCallbackQueue:_pinningValidatorCallbackQueue
                                                                     validationCallback:^(TSKPinningValidatorResult * _Nonnull result, NSString * _Nonnull notedHostname, TKSDomainPinningPolicy *_Nonnull notedHostnamePinningPolicy) {
                                                                         typeof(self) strongSelf = weakSelf;
                                                                         if (!strongSelf) {
@@ -181,11 +168,6 @@ void TSKLog(NSString *format, ...)
                                                                                 userDefinedCallback(result, notedHostname, notedHostnamePinningPolicy);
                                                                             });
                                                                         }
-                                                                        
-                                                                        // Send analytics report
-                                                                        [strongSelf sendValidationReport:result
-                                                                                           notedHostname:notedHostname
-                                                                                           pinningPolicy:notedHostnamePinningPolicy];
                                                                     }];
         
         TSKLog(@"Successfully initialized with configuration %@", _configuration);
@@ -197,44 +179,6 @@ void TSKLog(NSString *format, ...)
 #pragma mark Validation Callback
 
 
-// The block which receives pin validation results and turns them into pin validation reports
-- (void)sendValidationReport:(TSKPinningValidatorResult *)result notedHostname:(NSString *)notedHostname pinningPolicy:(NSDictionary<TSKDomainConfigurationKey, id> *)notedHostnamePinningPolicy
-{
-    TSKTrustEvaluationResult validationResult = result.evaluationResult;
-    
-    // Send a report only if the there was a pinning failure
-    if (validationResult != TSKTrustEvaluationSuccess)
-    {
-#if !TARGET_OS_IPHONE
-        if (validationResult != TSKTrustEvaluationFailedUserDefinedTrustAnchor)
-#endif
-        {
-            // Pin validation failed: retrieve the list of configured report URLs
-            NSMutableArray *reportUris = [NSMutableArray arrayWithArray:notedHostnamePinningPolicy[kTSKReportUris]];
-            
-            // Also enable the default reporting URL
-            if ([notedHostnamePinningPolicy[kTSKDisableDefaultReportUri] boolValue] == NO)
-            {
-                [reportUris addObject:[NSURL URLWithString:kTSKDefaultReportUri]];
-            }
-            
-            // If some report URLs have been defined, send the pin failure report
-            if (reportUris.count > 0)
-            {
-                [self.pinFailureReporter pinValidationFailedForHostname:result.serverHostname
-                                                                   port:nil
-                                                       certificateChain:result.certificateChain
-                                                          notedHostname:notedHostname
-                                                             reportURIs:reportUris
-                                                      includeSubdomains:[notedHostnamePinningPolicy[kTSKIncludeSubdomains] boolValue]
-                                                         enforcePinning:[notedHostnamePinningPolicy[kTSKEnforcePinning] boolValue]
-                                                              knownPins:notedHostnamePinningPolicy[kTSKPublicKeyHashes]
-                                                       validationResult:validationResult
-                                                         expirationDate:notedHostnamePinningPolicy[kTSKExpirationDate]];
-            }
-        }
-    }
-}
 
 - (void)setPinningValidatorCallbackQueue:(dispatch_queue_t)pinningValidatorCallbackQueue
 {
