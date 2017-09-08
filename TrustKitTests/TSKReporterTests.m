@@ -78,10 +78,4 @@ static NSString * const kTSKDefaultReportUri = @"https://overmind.datatheorem.co
     [super tearDown];
 }
 
-- (void)testIdentifierForVendor
-{
-    NSString *idfv = identifier_for_vendor();
-    XCTAssertNotNil(idfv);
-}
-
 @end
