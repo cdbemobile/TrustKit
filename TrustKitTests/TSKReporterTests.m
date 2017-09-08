@@ -16,12 +16,9 @@
 
 #import "../TrustKit/TSKPinningValidatorResult.h"
 #import "../TrustKit/TSKPinningValidator_Private.h"
-#import "../TrustKit/Reporting/TSKBackgroundReporter.h"
-#import "../TrustKit/Reporting/TSKPinFailureReport.h"
 #import "../TrustKit/Reporting/reporting_utils.h"
 
 #import <OCMock/OCMock.h>
-#import "../TrustKit/Reporting/vendor_identifier.h"
 #import "TSKCertificateUtils.h"
 
 #pragma mark Test suite
